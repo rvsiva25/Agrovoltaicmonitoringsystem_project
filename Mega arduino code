@@ -1,0 +1,298 @@
+#include <SoftwareSerial.h>
+//#include <ArduinoJson.h>
+#include <Servo.h>
+#include<Wire.h>
+SoftwareSerial nodemcu(2,3);
+
+
+
+Servo servo1;
+//solar tracking variables----------------------------
+int serv = 0;
+
+int eastldrpin = 0 ;
+int westldrpin = 1;
+
+int sensor = 8; //sensor digital pin vonnected to pin 8
+int val; //This variable stores the value received from Soil moisture sensor.
+
+int eastval = 0;
+int westval = 0;
+
+int counter = 0;
+int eastaverage = 0;
+int westaverage = 0;
+int numaverage = 20;
+int threshold = 10;
+
+//plant watering variables----------------------------------------
+const int relay_1 = 7;
+const int relay_2 = 6;
+const int relay_3 = 5;
+//soil moisture variables================================
+int soil_1 = A2;
+int soil_2 = A3;
+int soilMoistureValue2 = 0;
+int soilMoistureValue3 = 0;
+const int dry2 = 600;
+const int wet2 = 250;
+
+const int dry3 = 600;
+const int wet3 = 250;
+int percentageHumidity1 = map(soilMoistureValue2, wet2, dry2, 100, 0);
+int percentageHumidity2 = map(soilMoistureValue3, wet3, dry3, 100, 0);
+
+String mystring;
+String mystring2;
+//voltage and current variables=======================================
+int analogInput = A5; // Define Analog pin A5 f to read potential
+float vout = 0.0;// output voltage pin variable
+float vin = 0.0;// input voltage variable pin
+float R1 = 30000.0; // resistor to extract the voltage
+float R2 = 7500.0; //
+int value = 0;
+
+void setup() {
+
+  /* register request event */
+  Serial.begin(115200);
+  nodemcu.begin(115200);
+  servo1.attach(9);
+  pinMode(soil_1, INPUT);
+  pinMode(soil_2, INPUT);
+  pinMode(analogInput, INPUT);
+  pinMode(relay_1, OUTPUT);
+  pinMode(relay_2, OUTPUT);
+  pinMode(relay_3, OUTPUT);
+  delay(1000);/* start serial for debug */
+  //Serial.print("program started");
+
+}
+
+
+void loop()
+{
+
+//  soilMoistureValue2 = analogRead(soil_1);
+//  soilMoistureValue3 = analogRead(soil_2);
+  soil();
+  power();
+  solar_tracking();
+  
+
+  mystring = String(percentageHumidity1) + "," + String(percentageHumidity2)+ ",";
+  
+  nodemcu.print(mystring);
+  Serial.println(mystring);
+  mystring = "";
+
+  delay(10);
+}
+
+//soil moistute sensor data====================
+void soil() {
+  soilMoistureValue2 = analogRead(A2);  //put Sensor insert into soil
+  soilMoistureValue3 = analogRead(A3);  //put Sensor insert into soil
+  percentageHumidity1 = map(soilMoistureValue2, wet2, dry2, 100, 0);
+  percentageHumidity2 = map(soilMoistureValue3, wet3, dry3, 100, 0);
+
+
+  
+  if (percentageHumidity1 <= 0) {
+    percentageHumidity1 = 0;
+  }
+  if (percentageHumidity2 <= 0) {
+    percentageHumidity2 = 0;
+  }
+  if (percentageHumidity1 >= 100) {
+    percentageHumidity1 = 100;
+  }
+  if (percentageHumidity2 >= 100) {
+    percentageHumidity2 = 100;
+  }
+
+}
+//voltage & current sensor data===================
+void power(){
+  value = analogRead(analogInput);
+  vout = (value * 5.0) / 1024.0; // see text
+  vin = vout / (R2 / (R1 + R2)); // Calculate Inout voltage
+  //current sensor
+  int adc = analogRead(A6);
+  float voltage = adc*5/1023.0;
+  float current = (voltage-2.5)/0.185;
+  
+  Serial.print("Current : ");
+  Serial.println(current);
+  
+  Serial.print("INPUT V= ");
+  Serial.println(vin, 2);
+  delay(1000);
+  }
+  //plant watering=============================
+  void plant_watering()
+{
+  digitalWrite(relay_1, LOW);
+  digitalWrite(relay_2, LOW);
+  digitalWrite(relay_3, LOW);// solar panel cooling pump must EDIT========================================================================
+  delay(35000);
+  digitalWrite(relay_1, HIGH);
+  digitalWrite(relay_2, HIGH);
+  digitalWrite(relay_3, HIGH);
+  delay(86400000);
+
+
+}
+//solar tracking======================================
+void solar_tracking() {
+  eastaverage = 0;
+  westaverage = 0;
+
+  for (counter = 0; counter < numaverage; counter ++) {
+    eastval = analogRead(eastldrpin);
+    westval = analogRead(westldrpin);
+    eastaverage = eastaverage + eastval;
+    westaverage = westaverage + westval;
+  }
+
+  eastaverage = eastaverage / numaverage;
+  westaverage = westaverage / numaverage;
+  delay(10);
+
+//  Serial.print(eastaverage, DEC);
+//  Serial.print(", ");
+//  Serial.println(westaverage, DEC);
+
+  if (westaverage > eastaverage + threshold) {
+    if (serv < 180) {
+      serv += 1;
+      servo1.write(serv);
+    }
+  }
+  else if (eastaverage > westaverage + threshold) {
+    if (serv > 0) {
+      serv -= 1;
+      servo1.write(serv);
+    }
+  }
+}
+
+
+#define BLYNK_TEMPLATE_ID "TMPLez2EVzzx"
+#define BLYNK_DEVICE_NAME "Agrivoltaics Monitoring System with IoT"
+#define BLYNK_AUTH_TOKEN "lNouBGvEPcnwb1621i2wZUX0N0Zx9Rpr"
+
+
+
+// Comment this out to disable prints and save space
+#define BLYNK_PRINT Serial
+
+
+#include <ESP8266WiFi.h>
+#include <BlynkSimpleEsp8266.h>
+
+char auth[] = BLYNK_AUTH_TOKEN;
+
+// Your WiFi credentials.
+// Set password to "" for open networks.
+//char ssid[] = "Internet";
+//char pass[] = "TIME@c173aos";
+char ssid[] = "Dridi A";
+char pass[] = "11111111";
+int sdata;
+int sdata2;
+
+String myString; // complete message from arduino, which consistors of snesors data
+String myString2; // complete message from arduino, which consistors of snesors data
+char rdata; // received charactors
+char rdata2;
+
+
+BlynkTimer timer;
+
+void myTimer()
+{
+  // This function describes what will happen with each timer tick
+  // e.g. writing sensor value to datastream V5
+  Blynk.virtualWrite(V1, sdata);
+  Blynk.virtualWrite(V2, sdata2);
+}
+
+BLYNK_READ(V3) //Blynk app has something on V5
+{
+  int sensorData = analogRead(A0); //reading the sensor on A0
+  Blynk.virtualWrite(V3, sensorData); //sending to Blynk
+}
+
+
+BLYNK_WRITE(V0) // V5 is the number of Virtual Pin
+{
+
+  digitalWrite(V0, param.asInt());
+}
+//relay control
+BLYNK_WRITE(V4) // V5 is the number of Virtual Pin
+{
+
+  digitalWrite(D8, param.asInt());
+  digitalWrite(D7, param.asInt());
+}
+
+void setup()
+{
+  // Debug console
+  Serial.begin(115200);
+  //  pinMode(D2, OUTPUT);
+  //  pinMode(D8, OUTPUT);
+  //  pinMode(D7, OUTPUT);
+  //  //Blynk.begin(auth, ssid, pass);
+  // You can also specify server:
+  timer.setInterval(1000L, myTimer);
+  Blynk.begin(auth, ssid, pass, "blynk.cloud", 80);
+  Serial.println("Started");
+  delay(10);
+}
+
+void loop()
+{
+  sdata = Serial.parseInt();
+  sdata2 = Serial.parseInt();
+
+  Serial.print("Sensor1: ");
+  Serial.println(sdata);
+  Serial.print("Sensor2: ");
+  Serial.println(sdata2);
+  timer.run();
+
+  Blynk.virtualWrite(V1, sdata);
+  Blynk.virtualWrite(V2, sdata2);
+
+  Serial.flush();
+  return;
+  if (Serial.available() == 0 )
+  {
+    Blynk.run();
+    myTimer();
+
+
+  }
+
+  if (Serial.available() >= 0) {
+    //Serial.println(Serial.read());
+    //look for the next valid integer in the incoming serial stream:
+    sdata = Serial.parseInt();
+    sdata2 = Serial.parseInt();
+
+    Serial.print("Sensor1: ");
+    Serial.println(sdata);
+    Serial.print("Sensor2: ");
+    Serial.println(sdata2);
+    timer.run();
+
+    Blynk.virtualWrite(V1, sdata);
+    Blynk.virtualWrite(V2, sdata2);
+
+    Serial.flush();
+    return;
+  }
+}
